@@ -23,6 +23,7 @@ from test_framework.messages import (
     CTxIn,
     CTxOut,
     MAX_BLOCK_BASE_SIZE,
+    LEGACY_MAX_BLOCK_BASE_SIZE,
     uint256_from_compact,
     uint256_from_str,
 )
@@ -1253,12 +1254,12 @@ class FullBlockTest(BitcoinTestFramework):
         for i in range(89, LARGE_REORG_SIZE + 89):
             b = self.next_block(i, spend)
             tx = CTransaction()
-            script_length = MAX_BLOCK_BASE_SIZE - len(b.serialize()) - 69
+            script_length = LEGACY_MAX_BLOCK_BASE_SIZE - len(b.serialize()) - 69
             script_output = CScript([b'\x00' * script_length])
             tx.vout.append(CTxOut(0, script_output))
             tx.vin.append(CTxIn(COutPoint(b.vtx[1].sha256, 0)))
             b = self.update_block(i, [tx])
-            assert_equal(len(b.serialize()), MAX_BLOCK_BASE_SIZE)
+            assert_equal(len(b.serialize()), LEGACY_MAX_BLOCK_BASE_SIZE)
             blocks.append(b)
             self.save_spendable_output()
             spend = self.get_spendable_output()
