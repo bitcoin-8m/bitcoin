@@ -40,6 +40,7 @@ from test_framework.messages import (
     ser_uint256,
     ser_vector,
     sha256,
+    uint256_from_str,
     FromHex,
 )
 from test_framework.p2p import (
@@ -55,6 +56,7 @@ from test_framework.script import (
     OP_1,
     OP_2,
     OP_16,
+    OP_2DROP,
     OP_CHECKMULTISIG,
     OP_CHECKSIG,
     OP_DROP,
@@ -278,6 +280,7 @@ class SegWitTest(BitcoinTestFramework):
         self.test_p2sh_witness()
         self.test_witness_commitments()
         self.test_block_malleability()
+        self.test_witness_block_size()
         self.test_submit_block()
         self.test_extra_witness_data()
         self.test_max_witness_push_length()
@@ -907,6 +910,84 @@ class SegWitTest(BitcoinTestFramework):
         # Changing the witness reserved value doesn't change the block hash
         block.vtx[0].wit.vtxinwit[0].scriptWitness.stack = [ser_uint256(0)]
         test_witness_block(self.nodes[0], self.test_node, block, accepted=True)
+
+    @subtest  # type: ignore
+    def test_witness_block_size(self):
+        # TODO: Test that non-witness carrying blocks can't exceed 1MB
+        # Skipping this test for now; this is covered in p2p-fullblocktest.py
+
+        # Test that witness-bearing blocks are limited at ceil(base + wit/4) <= 1MB.
+        block = self.build_next_block()
+
+        assert len(self.utxo) > 0
+
+        # Create a P2WSH transaction.
+        # The witness program will be a bunch of OP_2DROP's, followed by OP_TRUE.
+        # This should give us plenty of room to tweak the spending tx's
+        # virtual size.
+        NUM_DROPS = 200  # 201 max ops per script!
+        NUM_OUTPUTS = 50
+
+        witness_program = CScript([OP_2DROP] * NUM_DROPS + [OP_TRUE])
+        witness_hash = uint256_from_str(sha256(witness_program))
+        script_pubkey = CScript([OP_0, ser_uint256(witness_hash)])
+
+        prevout = COutPoint(self.utxo[0].sha256, self.utxo[0].n)
+        value = self.utxo[0].nValue
+
+        parent_tx = CTransaction()
+        parent_tx.vin.append(CTxIn(prevout, b""))
+        child_value = int(value / NUM_OUTPUTS)
+        for _ in range(NUM_OUTPUTS):
+            parent_tx.vout.append(CTxOut(child_value, script_pubkey))
+        parent_tx.vout[0].nValue -= 50000
+        assert parent_tx.vout[0].nValue > 0
+        parent_tx.rehash()
+
+        child_tx = CTransaction()
+        for i in range(NUM_OUTPUTS):
+            child_tx.vin.append(CTxIn(COutPoint(parent_tx.sha256, i), b""))
+        child_tx.vout = [CTxOut(value - 100000, CScript([OP_TRUE]))]
+        for _ in range(NUM_OUTPUTS):
+            child_tx.wit.vtxinwit.append(CTxInWitness())
+            child_tx.wit.vtxinwit[-1].scriptWitness.stack = [b'a' * 195] * (2 * NUM_DROPS) + [witness_program]
+        child_tx.rehash()
+        self.update_witness_block_with_transactions(block, [parent_tx, child_tx])
+
+        vsize = get_virtual_size(block)
+        additional_bytes = (MAX_BLOCK_BASE_SIZE - vsize) * 4
+        i = 0
+        while additional_bytes > 0:
+            # Add some more bytes to each input until we hit MAX_BLOCK_BASE_SIZE+1
+            extra_bytes = min(additional_bytes + 1, 55)
+            block.vtx[-1].wit.vtxinwit[int(i / (2 * NUM_DROPS))].scriptWitness.stack[i % (2 * NUM_DROPS)] = b'a' * (195 + extra_bytes)
+            additional_bytes -= extra_bytes
+            i += 1
+
+        block.vtx[0].vout.pop()  # Remove old commitment
+        add_witness_commitment(block)
+        block.solve()
+        vsize = get_virtual_size(block)
+        assert_equal(vsize, MAX_BLOCK_BASE_SIZE + 1)
+        # Make sure that our test case would exceed the old max-network-message
+        # limit
+        assert len(block.serialize()) > 2 * 1024 * 1024
+
+        test_witness_block(self.nodes[0], self.test_node, block, accepted=False)
+
+        # Now resize the second transaction to make the block fit.
+        cur_length = len(block.vtx[-1].wit.vtxinwit[0].scriptWitness.stack[0])
+        block.vtx[-1].wit.vtxinwit[0].scriptWitness.stack[0] = b'a' * (cur_length - 1)
+        block.vtx[0].vout.pop()
+        add_witness_commitment(block)
+        block.solve()
+        assert get_virtual_size(block) == MAX_BLOCK_BASE_SIZE
+
+        test_witness_block(self.nodes[0], self.test_node, block, accepted=True)
+
+        # Update available utxo's
+        self.utxo.pop(0)
+        self.utxo.append(UTXO(block.vtx[-1].sha256, 0, block.vtx[-1].vout[0].nValue))
 
     @subtest  # type: ignore
     def test_submit_block(self):
