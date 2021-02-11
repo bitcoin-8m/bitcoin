@@ -1,5 +1,5 @@
 ---
-name: "bitcoin-core-osx-8.21"
+name: "bitcoin8m-core-osx-8.21"
 enable_cache: true
 distro: "ubuntu"
 suites:
