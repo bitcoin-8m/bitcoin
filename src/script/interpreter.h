@@ -139,6 +139,10 @@ enum
 
     // Making unknown public key versions (in BIP 342 scripts) non-standard
     SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_PUBKEYTYPE = (1U << 20),
+
+    // Bitcoin8m activation
+    //
+    SCRIPT_VERIFY_BITCOIN8M = (1U << 21),
 };
 
 bool CheckSignatureEncoding(const std::vector<unsigned char> &vchSig, unsigned int flags, ScriptError* serror);

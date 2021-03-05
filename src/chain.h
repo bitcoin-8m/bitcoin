@@ -190,6 +190,8 @@ public:
     {
     }
 
+    static bool IsSupportedBit(int enabledBitPosition, const CBlockIndex* pstart, unsigned int nRequired, unsigned int nToCheck);
+
     explicit CBlockIndex(const CBlockHeader& block)
         : nVersion{block.nVersion},
           hashMerkleRoot{block.hashMerkleRoot},

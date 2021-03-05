@@ -1926,6 +1926,10 @@ static unsigned int GetBlockScriptFlags(const CBlockIndex* pindex, const Consens
         flags |= SCRIPT_VERIFY_NULLDUMMY;
     }
 
+    if (VersionBitsState(pindex->pprev, consensusparams, Consensus::DEPLOYMENT_BITCOIN8M, versionbitscache) == ThresholdState::ACTIVE) {
+        flags |= SCRIPT_VERIFY_BITCOIN8M;
+    }
+
     return flags;
 }
 
@@ -3619,7 +3623,23 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-blk-weight", strprintf("%s : weight limit failed", __func__));
     }
 
+    // Reject big blocks when less than 95% of the network has upgraded:
+    if (GetBlockWeight(block) > LEGACY_MAX_BLOCK_WEIGHT && !CBlockIndex::IsSupportedBit(consensusParams.vDeployments[Consensus::DEPLOYMENT_BITCOIN8M].bit, pindexPrev, 950, 1000))
+        return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-blk-weight", strprintf("%s : weight limit failed", __func__));
+
     return true;
+}
+
+bool CBlockIndex::IsSupportedBit(int enabledBitPosition, const CBlockIndex* pstart, unsigned int nRequired, unsigned int nToCheck)
+{
+    unsigned int nFound = 0;
+    for (unsigned int i = 0; i < nToCheck && nFound < nRequired && pstart != NULL; i++)
+    {
+        if ((pstart->nVersion & (1<<enabledBitPosition)) != 0)
+            ++nFound;
+        pstart = pstart->pprev;
+    }
+    return (nFound >= nRequired);
 }
 
 bool BlockManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex)
