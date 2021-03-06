@@ -1355,6 +1355,7 @@ RPCHelpMan getblockchaininfo()
     BuriedForkDescPushBack(softforks, "segwit", consensusParams.SegwitHeight);
     BIP9SoftForkDescPushBack(softforks, "testdummy", consensusParams, Consensus::DEPLOYMENT_TESTDUMMY);
     BIP9SoftForkDescPushBack(softforks, "taproot", consensusParams, Consensus::DEPLOYMENT_TAPROOT);
+    BIP9SoftForkDescPushBack(softforks, "bitcoin8m", consensusParams, Consensus::DEPLOYMENT_BITCOIN8M);
     obj.pushKV("softforks",             softforks);
 
     obj.pushKV("warnings", GetWarnings(false).original);

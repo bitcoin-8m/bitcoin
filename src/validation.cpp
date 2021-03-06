@@ -1827,16 +1827,23 @@ void ThreadScriptCheck(int worker_num) {
 
 VersionBitsCache versionbitscache GUARDED_BY(cs_main);
 
+enum DeploymentPos
+{
+    DEPLOYMENT_TESTDUMMY,
+    DEPLOYMENT_TAPROOT, // Deployment of Schnorr/Taproot (BIPs 340-342)
+    // NOTE: Also add new deployments to VersionBitsDeploymentInfo in versionbits.cpp
+    DEPLOYMENT_BITCOIN8M,
+    MAX_VERSION_BITS_DEPLOYMENTS
+};
+
 int32_t ComputeBlockVersion(const CBlockIndex* pindexPrev, const Consensus::Params& params)
 {
     LOCK(cs_main);
-    int32_t nVersion = VERSIONBITS_TOP_BITS;
+    int32_t nVersion = 0x20000000UL;
 
-    for (int i = 0; i < (int)Consensus::MAX_VERSION_BITS_DEPLOYMENTS; i++) {
+    for (int i = 0; i < 3; i++) {
         ThresholdState state = VersionBitsState(pindexPrev, params, static_cast<Consensus::DeploymentPos>(i), versionbitscache);
-        if (state == ThresholdState::LOCKED_IN || state == ThresholdState::STARTED) {
-            nVersion |= VersionBitsMask(params, static_cast<Consensus::DeploymentPos>(i));
-        }
+          nVersion |= VersionBitsMask(params, static_cast<Consensus::DeploymentPos>(i));
     }
 
     return nVersion;
@@ -1924,6 +1931,10 @@ static unsigned int GetBlockScriptFlags(const CBlockIndex* pindex, const Consens
     // Start enforcing BIP147 NULLDUMMY (activated simultaneously with segwit)
     if (IsWitnessEnabled(pindex->pprev, consensusparams)) {
         flags |= SCRIPT_VERIFY_NULLDUMMY;
+    }
+
+    if (VersionBitsState(pindex->pprev, consensusparams, Consensus::DEPLOYMENT_BITCOIN8M, versionbitscache) == ThresholdState::ACTIVE) {
+        flags |= SCRIPT_VERIFY_BITCOIN8M;
     }
 
     return flags;
